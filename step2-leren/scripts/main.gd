@@ -101,6 +101,13 @@ func _ready() -> void:
 		session.set_wait_mode(false)
 	_select_song(song_index)
 	_refresh_options()
+	if xr_active:
+		# De XR-sessie draait pas na een paar frames: dan pas Hz uitlezen/instellen.
+		get_tree().create_timer(2.0).timeout.connect(func() -> void:
+			_log("[hz] beschikbaar: %s, nu %.0f Hz" % [_refresh_rates(), _current_rate()])
+			if _wanted_rate > 0.0:
+				_apply_refresh_rate(_wanted_rate)
+			_refresh_options())
 	_refresh_diagnostics()
 	_save_diagnostics()
 	_set_state("menu")
@@ -481,6 +488,7 @@ func _on_ui(id: String, arg: Variant) -> void:
 			key_alpha_i = (key_alpha_i + 1) % KEY_ALPHAS.size()
 			keyboard.base_alpha = KEY_ALPHAS[key_alpha_i]
 		"pass": _set_passthrough(not passthrough_on)
+		"hz": _next_refresh_rate()
 		"diag":
 			_refresh_diagnostics()
 			_set_state("diag")
@@ -505,7 +513,46 @@ func _on_ui(id: String, arg: Variant) -> void:
 
 func _refresh_options() -> void:
 	ui.set_options({"wait": session.wait_mode, "hand": session.practice_hand, "speed": session.speed,
-		"keys": KEY_ALPHA_NAMES[key_alpha_i], "passthrough": passthrough_on})
+		"keys": KEY_ALPHA_NAMES[key_alpha_i], "passthrough": passthrough_on,
+		"hz_text": "%d Hz" % roundi(_current_rate()) if _current_rate() > 0 else "Hz",
+		"hz_disabled": _refresh_rates().size() < 2,
+		"hz_note": "" if _refresh_rates().size() >= 2 else "De headset biedt apps nu maar één verversingsfrequentie aan."})
+
+
+# ---------------------------------------------------------------- verversingsfrequentie
+
+var _wanted_rate := 0.0
+
+
+func _refresh_rates() -> Array:
+	if not xr_active or not xr.has_method("get_available_display_refresh_rates"):
+		return []
+	var r: Array = xr.get_available_display_refresh_rates()
+	r.sort()
+	return r
+
+
+func _current_rate() -> float:
+	if not xr_active or not ("display_refresh_rate" in xr):
+		return 0.0
+	return float(xr.display_refresh_rate)
+
+
+func _apply_refresh_rate(rate: float) -> void:
+	if rate <= 0.0 or not (rate in _refresh_rates()):
+		return
+	xr.display_refresh_rate = rate
+	Engine.physics_ticks_per_second = roundi(rate)
+	_log("[hz] gevraagd %.0f Hz, nu %.0f Hz (beschikbaar: %s)" % [rate, _current_rate(), _refresh_rates()])
+
+
+func _next_refresh_rate() -> void:
+	var rates := _refresh_rates()
+	if rates.size() < 2:
+		return
+	var i := rates.find(_current_rate())
+	_wanted_rate = rates[(i + 1) % rates.size()]
+	_apply_refresh_rate(_wanted_rate)
 
 
 # ---------------------------------------------------------------- kalibratie
@@ -686,7 +733,18 @@ func _load_calibration() -> void:
 
 # ---------------------------------------------------------------- per frame
 
+var _ft_sum := 0.0
+var _ft_n := 0
+
+
 func _process(delta: float) -> void:
+	# Gemiddelde frametijd elke 10 s in het log (moet ~13,9 ms zijn bij 72 Hz).
+	_ft_sum += delta
+	_ft_n += 1
+	if _ft_sum >= 10.0:
+		_log("[perf] gemiddeld %.1f ms per frame (%d fps)" % [_ft_sum / _ft_n * 1000.0, roundi(_ft_n / _ft_sum)])
+		_ft_sum = 0.0
+		_ft_n = 0
 	if xr_active and not _placed and Time.get_ticks_msec() - _start_msec > 1500:
 		_place_in_front_of_head()
 	_track_hands()
@@ -836,6 +894,7 @@ func _save_settings() -> void:
 	cfg.set_value("oefenen", "wachten", session.wait_mode)
 	cfg.set_value("oefenen", "hand", session.practice_hand)
 	cfg.set_value("oefenen", "toetsen", key_alpha_i)
+	cfg.set_value("beeld", "hz", _wanted_rate)
 	cfg.save(SETTINGS_FILE)
 
 
@@ -851,6 +910,7 @@ func _load_settings() -> void:
 	session.set_wait_mode(cfg.get_value("oefenen", "wachten", true))
 	session.practice_hand = cfg.get_value("oefenen", "hand", -1)
 	key_alpha_i = clampi(cfg.get_value("oefenen", "toetsen", 0), 0, KEY_ALPHAS.size() - 1)
+	_wanted_rate = cfg.get_value("beeld", "hz", 0.0)
 	keyboard.base_alpha = KEY_ALPHAS[key_alpha_i]
 
 
@@ -876,6 +936,7 @@ func _refresh_diagnostics() -> void:
 	lines.append("")
 	lines.append("MIDI-ingangen (Godot): %s" % (", ".join(midi.devices) if midi and not midi.devices.is_empty() else "geen"))
 	lines.append("Liedjes: %d   Kalibratie: %s" % [songs.size(), _calib_msg])
+	lines.append("Verversing: %.0f Hz, beschikbaar voor apps: %s" % [_current_rate(), _refresh_rates()])
 	_diag_text = "\n".join(lines)
 	ui.set_diag(_diag_text)
 

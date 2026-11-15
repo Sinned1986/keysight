@@ -27,6 +27,7 @@ func _ready() -> void:
 	viewport.disable_3d = true
 	viewport.gui_embed_subwindows = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport.msaa_2d = Viewport.MSAA_4X
 	add_child(viewport)
 	var mesh := QuadMesh.new()
 	mesh.size = size_m

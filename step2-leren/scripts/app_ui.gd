@@ -16,8 +16,8 @@ const ACCENT := Color("3ddc97")
 const ACCENT_DARK := Color("0e2a20")
 const AMBER := Color("ffc145")
 const BAD := Color("ff5a5a")
-const RIGHT := Color(1.0, 0.55, 0.10)   # rechterhand oranje (zelfde als de noten)
-const LEFT := Color(0.15, 0.55, 1.0)    # linkerhand blauw
+const RIGHT := Color(0.74, 0.40, 1.0)   # rechterhand violet (zelfde als de noten)
+const LEFT := Color(0.22, 0.86, 1.0)    # linkerhand cyaan
 
 var font_regular: FontFile
 var font_bold: FontFile
@@ -32,6 +32,7 @@ var _seg := {}             # naam -> {waarde: Button}
 var _tempo_label: Button
 var _keys_btn: Button
 var _pass_btn: Button
+var _hz_btn: Button
 var _hud := {}
 var _res := {}
 var _cal := {}
@@ -276,7 +277,7 @@ func _build_menu() -> void:
 	right.add_child(start)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 8)
-	for spec in [["Kalibreren", "calib"], ["Bijstellen", "tune"], ["Passthrough", "pass"], ["Toetsen", "keys"], ["Diagnose", "diag"]]:
+	for spec in [["Kalibreren", "calib"], ["Bijstellen", "tune"], ["Passthrough", "pass"], ["Toetsen", "keys"], ["Hz", "hz"], ["Diagnose", "diag"]]:
 		var b := _button(spec[0], spec[1])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 58)
@@ -286,6 +287,8 @@ func _build_menu() -> void:
 			_keys_btn = b
 		elif spec[1] == "pass":
 			_pass_btn = b
+		elif spec[1] == "hz":
+			_hz_btn = b
 			b.toggle_mode = true
 	right.add_child(tools)
 
@@ -352,6 +355,9 @@ func set_options(o: Dictionary) -> void:
 		_seg["hand"][o["hand"]].button_pressed = true
 	_tempo_label.text = "%d%%" % roundi(o["speed"] * 100)
 	_keys_btn.text = "Toetsen: %s" % o["keys"]
+	_hz_btn.text = o.get("hz_text", "Hz")
+	_hz_btn.disabled = o.get("hz_disabled", true)
+	_hz_btn.tooltip_text = o.get("hz_note", "")
 	_pass_btn.button_pressed = o["passthrough"]
 	_updating = false
 
