@@ -7,7 +7,7 @@ Leer piano spelen op je eigen piano met de Steam Frame. KeySight draait native o
 
 - **Vallende noten** in een verticaal vlak op de achterrand van de toetsen. De onderkant van een
   balk raakt de toets precies op het moment van aanslaan, en de lengte van de balk is de duur.
-  Rechterhand oranje, linkerhand blauw. De doeltoets licht vooraf op: groen = raak, rood = fout.
+  Rechterhand violet, linkerhand cyaan (neonbalken met gloed). De doeltoets licht vooraf op: groen = raak, rood = fout.
   Er is een zachte gloed op de plek waar de balk de toets raakt.
 - **Wachtmodus**: de klok staat stil bij elk akkoord (noten binnen 40 ms) tot je alle tonen
   hebt ingedrukt. Je mag 0,35 s te vroeg zijn. De klok start bij de eerste juiste toets.

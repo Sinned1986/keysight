@@ -15,7 +15,7 @@ your real keys.
 
 - **Falling notes on your real keys**, in the style of Synthesia. A bar's bottom edge reaches
   the key exactly when you should play it, and its length is the note length. Right hand is
-  orange, left hand is blue. The target key lights up just before the note arrives, then turns
+  violet, left hand is cyan. The target key lights up just before the note arrives, then turns
   green when you hit it and red for a wrong key.
 - **Wait mode**: the song pauses at every chord until you've played all of its notes. The clock
   starts on your first correct key.
