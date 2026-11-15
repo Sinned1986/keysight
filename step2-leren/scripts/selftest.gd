@@ -13,6 +13,7 @@ func _ready() -> void:
 	_test_session_wait()
 	_test_session_hand()
 	_test_notation()
+	_test_midi_no_watchdog()
 	print("=== ZELFTEST KLAAR: %s ===" % ("OK" if failures == 0 else "%d FOUT(EN)" % failures))
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -272,3 +273,20 @@ func _test_notation() -> void:
 	_check(tre.size() == 3 and tre[2]["rest"], "rust opgevuld na de noten")
 	var bas: Array = m2.bars[0]["staves"][1]
 	_check(bas[0]["dur"] == 16, "hele noot in de bas")
+
+
+## Regressietest (bug van 14-11): een verbonden MIDI-apparaat mag nooit
+## "losgekoppeld" worden omdat het stil is of omdat een systeembestand leeg
+## lijkt. Na een minuut zonder events moet het apparaat er nog steeds zijn.
+func _test_midi_no_watchdog() -> void:
+	print("-- MIDI zonder waakhond")
+	var m := MidiMonitor.new()   # bewust niet aan de boom hangen: geen echte MIDI openen
+	m.devices = PackedStringArray(["Testpiano"])
+	var lost := [false]
+	m.devices_changed.connect(func(d: PackedStringArray) -> void:
+		if d.is_empty():
+			lost[0] = true)
+	for i in 60 * 60:
+		m._process(1.0 / 60.0)
+	_check(not lost[0] and m.devices.size() == 1, "60 s stilte: piano blijft verbonden")
+	m.free()

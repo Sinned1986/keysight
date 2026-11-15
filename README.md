@@ -134,7 +134,7 @@ Then press *Klaar*. Use *Bijstellen* to nudge the keyboard with the sticks.
 ## Contributing
 
 Issues and pull requests are welcome, especially reports from other pianos and keyboards: tell
-us whether it was detected, and the output of `cat /proc/asound/cards`. Please run the self-test
+us whether it was detected, and the output of `cat /proc/asound/cards`. Please run the self-test, and the hardware checklist in [docs/HARDWARE_TEST.md](docs/HARDWARE_TEST.md) if you have a headset,
 before sending a PR. Songs you contribute must be public-domain compositions in your own
 arrangement, or come with a licence that allows redistribution.
 
