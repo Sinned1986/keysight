@@ -38,6 +38,9 @@ var _res := {}
 var _cal := {}
 var _diag_label: Label
 var _updating := false
+var score: ScoreView
+var score_enabled := true
+var _state := "menu"
 
 
 func _init() -> void:
@@ -54,6 +57,10 @@ func _init() -> void:
 	_build_results()
 	_build_calib()
 	_build_diag()
+	score = ScoreView.new()
+	score.position = Vector2.ZERO
+	score.size = Vector2(W, H - 128 - 12)
+	add_child(score)
 	show_state("menu")
 
 
@@ -269,6 +276,7 @@ func _build_menu() -> void:
 	tempo.add_child(_tempo_label)
 	tempo.add_child(plus)
 	right.add_child(_row("TEMPO", tempo))
+	right.add_child(_row("BEELD", _segmented("view", [[0, "Vallend"], [1, "Partituur"], [2, "Beide"]])))
 	var grow := _spacer(0)
 	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(grow)
@@ -351,6 +359,8 @@ func set_options(o: Dictionary) -> void:
 	_updating = true
 	if _seg["mode"].has(o["wait"]):
 		_seg["mode"][o["wait"]].button_pressed = true
+	if o.has("view") and _seg["view"].has(o["view"]):
+		_seg["view"][o["view"]].button_pressed = true
 	if _seg["hand"].has(o["hand"]):
 		_seg["hand"][o["hand"]].button_pressed = true
 	_tempo_label.text = "%d%%" % roundi(o["speed"] * 100)
@@ -609,6 +619,13 @@ func set_diag(text: String) -> void:
 
 # ---------------------------------------------------------------- toestanden
 
+func set_score_enabled(on: bool) -> void:
+	score_enabled = on
+	score.visible = _state == "lesson" and on
+
+
 func show_state(name: String) -> void:
+	_state = name
+	score.visible = name == "lesson" and score_enabled
 	for k in _states.keys():
 		_states[k].visible = k == name

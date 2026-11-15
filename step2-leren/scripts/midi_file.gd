@@ -16,6 +16,11 @@ var duration := 0.0
 var error := ""
 var track_count := 0
 var hand_rule := ""                  # hoe linker/rechterhand is bepaald
+# Voor de partituur (alleen gelezen door de score-laag):
+var time_sig := Vector2i(4, 4)       # uit FF 58, standaard 4/4
+var key_sig := -99                   # FF 59: aantal kruizen (+) of mollen (-); -99 = onbekend
+var key_minor := false
+var last_tick := 0
 
 var _tempo: Array = []               # [[tick, us_per_quarter], ...]
 var _division := 480
@@ -91,6 +96,12 @@ func _parse_track(b: PackedByteArray, pos: int, end: int, track: int, out: Array
 			var lr := _vlq(b, pos + 2)
 			var mlen: int = lr[0]
 			var mpos: int = lr[1]
+			if mtype == 0x58 and mlen >= 2 and tick == 0:
+				time_sig = Vector2i(b[mpos], 1 << b[mpos + 1])
+			elif mtype == 0x59 and mlen >= 2 and key_sig == -99:
+				var sf := b[mpos]
+				key_sig = sf - 256 if sf > 127 else sf
+				key_minor = b[mpos + 1] == 1
 			if mtype == 0x51 and mlen == 3:
 				_tempo.append([tick, (b[mpos] << 16) | (b[mpos + 1] << 8) | b[mpos + 2]])
 			elif mtype == 0x2F:
@@ -180,10 +191,10 @@ func _build_notes(events: Array) -> void:
 			n["end_tick"] = last_tick
 		n["start"] = ticks_to_seconds(n["start_tick"])
 		n["end"] = maxf(ticks_to_seconds(n["end_tick"]), n["start"] + 0.05)
-		n.erase("start_tick")
-		n.erase("end_tick")
+		# start_tick/end_tick blijven bewaard voor de partituur.
 	notes.sort_custom(func(a, c): return a["start"] < c["start"] if not is_equal_approx(a["start"], c["start"]) else a["pitch"] < c["pitch"])
 	_assign_hands(track_notes)
+	self.last_tick = last_tick
 	for n in notes:
 		duration = maxf(duration, n["end"])
 	if notes.is_empty():
@@ -216,6 +227,27 @@ func _assign_hands(track_notes: Dictionary) -> void:
 		for n in notes:
 			n["hand"] = 0 if n["pitch"] < 60 else 1
 		hand_rule = "split op centrale C"
+
+
+func ticks_per_quarter() -> int:
+	return _division
+
+
+## Seconden -> tick (omgekeerd van ticks_to_seconds), voor de partituurcursor.
+func seconds_to_ticks(sec: float) -> float:
+	if _smpte_tpf > 0:
+		return sec * _smpte_fps * _smpte_tpf
+	var acc := 0.0
+	var last := 0
+	var us := 500000
+	for tp in _tempo:
+		var seg: float = (tp[0] - last) * us / 1000000.0 / _division
+		if acc + seg >= sec:
+			break
+		acc += seg
+		last = tp[0]
+		us = tp[1]
+	return last + (sec - acc) * 1000000.0 / us * _division
 
 
 static func _u16(b: PackedByteArray, p: int) -> int:

@@ -17,6 +17,11 @@ your real keys.
   the key exactly when you should play it, and its length is the note length. Right hand is
   violet, left hand is cyan. The target key lights up just before the note arrives, then turns
   green when you hit it and red for a wrong key.
+- **Sheet music view** (optional): a grand staff on the panel above the keys, where a paper
+  score would stand. Note values with stems and flags, clefs, key signature (from the file or
+  estimated), time signature and bar lines, a cursor and a page turn per system. Played notes
+  turn green, missed ones red. Choose falling notes, score, or both. Notation from MIDI is an
+  approximation: quantised to 16ths, no ties or beams, simplified rests.
 - **Wait mode**: the song pauses at every chord until you've played all of its notes. The clock
   starts on your first correct key.
 - **Play-along mode** at 30-150 % tempo, with timing measured per note.

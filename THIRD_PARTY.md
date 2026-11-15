@@ -33,6 +33,12 @@ No piARno code, models or MIDI files are included in this repository.
 Copyright 2020 Braille Institute of America, Inc. Licensed under the SIL Open Font License,
 Version 1.1. See `step2-leren/fonts/OFL.txt`.
 
+## Bravura (music font for the score view)
+
+Copyright (c) 2015, Steinberg Media Technologies GmbH, with Reserved Font Name "Bravura".
+Licensed under the SIL Open Font License, Version 1.1. See `step2-leren/fonts/Bravura-OFL.txt`.
+SMuFL glyph names and code points: https://www.smufl.org/
+
 ## Godot Engine
 
 KeySight is built with Godot Engine (MIT licence, https://godotengine.org/license). Exported

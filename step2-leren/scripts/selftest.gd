@@ -12,6 +12,7 @@ func _ready() -> void:
 	_test_session_play()
 	_test_session_wait()
 	_test_session_hand()
+	_test_notation()
 	print("=== ZELFTEST KLAAR: %s ===" % ("OK" if failures == 0 else "%d FOUT(EN)" % failures))
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -222,3 +223,52 @@ func _test_session_hand() -> void:
 					s.note_on(s.notes[k]["pitch"], 70)
 		s.update(1.0 / 72.0)
 	_check(s.done and s.hits == right, "alleen rechterhand-noten nodig (%d van %d)" % [s.hits, s.notes.size()])
+
+
+func _test_notation() -> void:
+	print("-- partituur")
+	var sp := ScoreModel.spell(61, 2)
+	_check(sp["letter"] == 0 and sp["alter"] == 1, "C#4 in D-majeur gespeld als Cis")
+	sp = ScoreModel.spell(61, -3)
+	_check(sp["letter"] == 1 and sp["alter"] == -1, "C#4 in Es-majeur gespeld als Des")
+	_check(ScoreModel.staff_pos(ScoreModel.spell(64, 0)["step"], true) == 0, "E4 op de onderste lijn (solsleutel)")
+	_check(ScoreModel.staff_pos(ScoreModel.spell(77, 0)["step"], true) == 8, "F5 op de bovenste lijn")
+	_check(ScoreModel.staff_pos(ScoreModel.spell(43, 0)["step"], false) == 0, "G2 op de onderste lijn (fa-sleutel)")
+	_check(ScoreModel.staff_pos(ScoreModel.spell(60, 0)["step"], true) == -2, "centrale C op de eerste hulplijn")
+	_check(ScoreModel.key_alter(3, 1) == 1 and ScoreModel.key_alter(6, -1) == -1 and ScoreModel.key_alter(0, 1) == 0, "voortekening: Fis in G, Bes in F")
+	_check(ScoreModel.note_value(5) == 4 and ScoreModel.note_value(6) == 6 and ScoreModel.note_value(16) == 16, "nootwaarden kwantiseren")
+	# Toonsoortschatting: G-majeur toonladder
+	var g_notes: Array = []
+	var scale := [55, 57, 59, 60, 62, 64, 66, 67, 71, 74, 79, 62, 67]
+	for i in scale.size():
+		g_notes.append({"pitch": scale[i], "start": i * 0.5, "end": i * 0.5 + 0.45})
+	_check(ScoreModel.estimate_key(g_notes)[0] == 1, "G-majeur herkend (1 kruis): %s" % [ScoreModel.estimate_key(g_notes)])
+	# Ode to Joy: C-majeur, 4/4, eerste maat = vier kwartnoten rechts
+	var song := MidiSong.load_file("res://songs/03 Ode to Joy (Beethoven).mid")
+	var sess := PracticeSession.new()
+	sess.load_song(song)
+	var m := ScoreModel.new()
+	m.build(song, sess.notes)
+	print("  Ode to Joy: %d maten, %d/%d, voortekening %d, %d maten per pagina" % [m.bars.size(), m.num, m.den, m.fifths, m.bars_per_page])
+	_check(m.fifths == 0 and m.num == 4 and m.den == 4, "C-majeur en 4/4")
+	var first: Array = m.bars[0]["staves"][0]
+	var durs := []
+	for e in first:
+		durs.append(e["dur"])
+	_check(durs == [4, 4, 4, 4], "eerste maat rechts = vier kwartnoten: %s" % [durs])
+	_check(m.bars.size() == 16, "16 maten")
+	# Voortekens binnen een maat: F#4 en dan F4 -> herstellingsteken
+	var acc_notes: Array = [
+		{"pitch": 66, "start": 0.0, "end": 0.4, "start_tick": 0, "end_tick": 480, "hand": 1},
+		{"pitch": 65, "start": 0.5, "end": 0.9, "start_tick": 480, "end_tick": 960, "hand": 1},
+		{"pitch": 48, "start": 0.0, "end": 1.9, "start_tick": 0, "end_tick": 1920, "hand": 0},
+	]
+	var fake := MidiSong.new()
+	fake.key_sig = 0
+	var m2 := ScoreModel.new()
+	m2.build(fake, acc_notes)
+	var tre: Array = m2.bars[0]["staves"][0]
+	_check(tre[0]["heads"][0]["acc"] == 1 and tre[1]["heads"][0]["acc"] == 0, "Fis dan F in één maat: kruis, dan herstellingsteken")
+	_check(tre.size() == 3 and tre[2]["rest"], "rust opgevuld na de noten")
+	var bas: Array = m2.bars[0]["staves"][1]
+	_check(bas[0]["dur"] == 16, "hele noot in de bas")

@@ -145,9 +145,11 @@ def fur_elise():
                "A4:2 r:1 C4:1 E4:1 A4:1 "
                "B4:2 r:1 E4:1 C5:1 B4:1 "
                "A4:6")
-    rh = voice(rh_spec, s)
+    # Opmaat: de eerste twee zestienden vallen aan het eind van maat 1.
+    pickup_shift = 4 * s
+    rh = [(t + pickup_shift, d, p) for t, d, p in voice(rh_spec, s)]
     bar = 6.0 * s
-    start = 2 * s + bar   # pickup + first bar of sixteenths
+    start = 2 * s + bar + pickup_shift   # pickup + first bar of sixteenths
     lh = []
     for i, chord in enumerate([("A2", "E3", "A3"), ("E2", "E3", "G#3"), ("A2", "E3", "A3"),
                                None, ("A2", "E3", "A3"), ("E2", "E3", "G#3"), ("A2", "E3", "A3")]):

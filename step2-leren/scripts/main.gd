@@ -124,6 +124,7 @@ func _ready() -> void:
 		var path := args[shot + 1]
 		get_tree().create_timer(float(args[shot + 2])).timeout.connect(func() -> void:
 			get_viewport().get_texture().get_image().save_png(path)
+			screen.viewport.get_texture().get_image().save_png(path.get_basename() + "_ui.png")
 			_log("[shot] " + path)
 			get_tree().quit())
 
@@ -304,6 +305,9 @@ func _select_song(i: int) -> void:
 		_log("[lied] %s: %s" % [songs[song_index].get_file(), s.error])
 	session.load_song(s)
 	highway.set_notes(session.notes)
+	score_model = ScoreModel.new()
+	score_model.build(s, session.notes)
+	ui.score.set_song(score_model, session.notes)
 	keyboard.release_all()
 	var left := 0
 	for n in session.notes:
@@ -327,7 +331,8 @@ func _select_song(i: int) -> void:
 func _set_state(st: String) -> void:
 	ui_state = st
 	ui.show_state(st)
-	highway.visible = st == "lesson"
+	highway.visible = st == "lesson" and view_mode != 1
+	ui.set_score_enabled(view_mode != 0)
 
 
 func _start_lesson() -> void:
@@ -481,6 +486,9 @@ func _on_ui(id: String, arg: Variant) -> void:
 		"start": _start_lesson()
 		"mode": session.set_wait_mode(bool(arg))
 		"hand": session.set_practice_hand(int(arg))
+		"view":
+			view_mode = int(arg)
+			_set_state(ui_state)
 		"slower": session.speed -= 0.1
 		"faster": session.speed += 0.1
 		"tempo_reset": session.speed = 1.0
@@ -513,7 +521,7 @@ func _on_ui(id: String, arg: Variant) -> void:
 
 func _refresh_options() -> void:
 	ui.set_options({"wait": session.wait_mode, "hand": session.practice_hand, "speed": session.speed,
-		"keys": KEY_ALPHA_NAMES[key_alpha_i], "passthrough": passthrough_on,
+		"keys": KEY_ALPHA_NAMES[key_alpha_i], "passthrough": passthrough_on, "view": view_mode,
 		"hz_text": _hz_text(),
 		"hz_disabled": not xr_active,
 		"hz_note": "Kies 72, 90 of 120 Hz. Als de headset het niet meteen aanbiedt, geldt het na een herstart van KeySight."})
@@ -522,6 +530,8 @@ func _refresh_options() -> void:
 # ---------------------------------------------------------------- verversingsfrequentie
 
 var _wanted_rate := 0.0
+var view_mode := 2          # 0 vallende noten, 1 partituur, 2 beide
+var score_model: ScoreModel
 
 
 func _refresh_rates() -> Array:
@@ -778,6 +788,8 @@ func _process(delta: float) -> void:
 		_demo_step()
 	if ui_state == "lesson":
 		session.update(delta)
+		if view_mode != 0 and session.song:
+			ui.score.set_cursor(score_model.pos16(session.song.seconds_to_ticks(session.t)))
 		var hints := highway.update_view(session.t, session.cursor())
 		for n in _hint_notes.keys():
 			if not hints.has(n):
@@ -918,6 +930,7 @@ func _save_settings() -> void:
 	cfg.set_value("oefenen", "hand", session.practice_hand)
 	cfg.set_value("oefenen", "toetsen", key_alpha_i)
 	cfg.set_value("beeld", "hz", _wanted_rate)
+	cfg.set_value("beeld", "weergave", view_mode)
 	cfg.save(SETTINGS_FILE)
 
 
@@ -934,6 +947,7 @@ func _load_settings() -> void:
 	session.practice_hand = cfg.get_value("oefenen", "hand", -1)
 	key_alpha_i = clampi(cfg.get_value("oefenen", "toetsen", 0), 0, KEY_ALPHAS.size() - 1)
 	_wanted_rate = cfg.get_value("beeld", "hz", 0.0)
+	view_mode = clampi(cfg.get_value("beeld", "weergave", 2), 0, 2)
 	keyboard.base_alpha = KEY_ALPHAS[key_alpha_i]
 
 
