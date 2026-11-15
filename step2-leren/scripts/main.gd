@@ -92,6 +92,7 @@ func _ready() -> void:
 	session.finished.connect(_on_finished)
 	_scan_songs()
 	_load_settings()
+	_layout_screen()
 	_load_calibration()
 	# Testopties: -- --song <nr> --nowait --state <naam>
 	var si := args.find("--song")
@@ -198,8 +199,7 @@ func _build_scene() -> void:
 	# Scherm boven de muziekstandaard, licht naar de ogen gekanteld.
 	screen = VrScreen.new(SCREEN_W, SCREEN_H)
 	screen.name = "Screen"
-	screen.position = Vector3(0, NoteHighway.MAX_HEIGHT + 0.03 + SCREEN_H / 2.0, -0.24)
-	screen.rotation_degrees = Vector3(12, 0, 0)
+	_layout_screen()
 	keyboard.add_child(screen)
 	ui = AppUI.new()
 	screen.add_ui(ui)
@@ -488,7 +488,20 @@ func _on_ui(id: String, arg: Variant) -> void:
 		"hand": session.set_practice_hand(int(arg))
 		"view":
 			view_mode = int(arg)
+			_layout_screen()
 			_set_state(ui_state)
+		"screen_up":
+			screen_dy = clampf(screen_dy + 0.03, -0.30, 0.30)
+			_layout_screen()
+		"screen_down":
+			screen_dy = clampf(screen_dy - 0.03, -0.30, 0.30)
+			_layout_screen()
+		"tilt_more":
+			screen_tilt = clampf(screen_tilt + 4.0, -20.0, 30.0)
+			_layout_screen()
+		"tilt_less":
+			screen_tilt = clampf(screen_tilt - 4.0, -20.0, 30.0)
+			_layout_screen()
 		"slower": session.speed -= 0.1
 		"faster": session.speed += 0.1
 		"tempo_reset": session.speed = 1.0
@@ -531,6 +544,26 @@ func _refresh_options() -> void:
 
 var _wanted_rate := 0.0
 var view_mode := 2          # 0 vallende noten, 1 partituur, 2 beide
+var screen_dy := 0.0       # door de gebruiker: scherm hoger/lager (m)
+var screen_tilt := 0.0     # door de gebruiker: extra kanteling (graden)
+
+
+## Plaatst het scherm: met partituur lager (muziekstandaard-hoogte), dichterbij
+## en meer gekanteld, en de vallende noten dan korter zodat ze niet raken.
+func _layout_screen() -> void:
+	var with_score := view_mode != 0
+	highway.max_height = NoteHighway.SHORT_HEIGHT if view_mode == 2 else NoteHighway.MAX_HEIGHT
+	var bottom := (highway.max_height if view_mode == 2 else 0.0) + 0.03
+	if not with_score:
+		bottom = NoteHighway.MAX_HEIGHT + 0.03
+	# Met partituur: achterover leunen zoals een muziekstandaard (bovenkant van je af).
+	var tilt := (-8.0 if with_score else 12.0) + screen_tilt
+	# Midden van het scherm, rekening houdend met de kanteling.
+	var half := SCREEN_H / 2.0
+	var y := bottom + half * cos(deg_to_rad(tilt)) + screen_dy
+	var z := (-0.20 if with_score else -0.24) + half * sin(deg_to_rad(tilt))
+	screen.position = Vector3(0, y, z)
+	screen.rotation_degrees = Vector3(tilt, 0, 0)
 var score_model: ScoreModel
 
 
@@ -705,7 +738,7 @@ func _update_tune_text() -> void:
 	ui.set_calib("Bijstellen",
 		"Rechter stick: naar links/rechts en naar voren/achteren.\nLinker stick: omhoog/omlaag en draaien.\nLeg het klavier precies over de echte toetsen en druk op Klaar.",
 		"Verschuiving %+.1f cm opzij, %+.1f cm diepte, %+.1f cm hoogte, %+.1f graden" % [
-			_offset.x * 100, _offset.z * 100, _offset.y * 100, _offset.w], -1, true)
+			_offset.x * 100, _offset.z * 100, _offset.y * 100, _offset.w], -1, true, true)
 
 
 func _finish_tune() -> void:
@@ -931,6 +964,8 @@ func _save_settings() -> void:
 	cfg.set_value("oefenen", "toetsen", key_alpha_i)
 	cfg.set_value("beeld", "hz", _wanted_rate)
 	cfg.set_value("beeld", "weergave", view_mode)
+	cfg.set_value("beeld", "scherm_dy", screen_dy)
+	cfg.set_value("beeld", "scherm_kanteling", screen_tilt)
 	cfg.save(SETTINGS_FILE)
 
 
@@ -948,6 +983,8 @@ func _load_settings() -> void:
 	key_alpha_i = clampi(cfg.get_value("oefenen", "toetsen", 0), 0, KEY_ALPHAS.size() - 1)
 	_wanted_rate = cfg.get_value("beeld", "hz", 0.0)
 	view_mode = clampi(cfg.get_value("beeld", "weergave", 2), 0, 2)
+	screen_dy = cfg.get_value("beeld", "scherm_dy", 0.0)
+	screen_tilt = cfg.get_value("beeld", "scherm_kanteling", 0.0)
 	keyboard.base_alpha = KEY_ALPHAS[key_alpha_i]
 
 

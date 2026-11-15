@@ -8,7 +8,15 @@ extends Node3D
 ## Idee en kleuren per hand naar piARno (MIT), code nieuw geschreven.
 
 const FALL_SPEED := 0.22      # meter per seconde liedtijd
-const MAX_HEIGHT := 0.45      # hoe hoog de baan is (lookahead = MAX_HEIGHT / FALL_SPEED)
+const MAX_HEIGHT := 0.45      # standaardhoogte van de baan
+const SHORT_HEIGHT := 0.26    # korter als de partituur er ook staat
+
+## Hoogte van de baan (lookahead = max_height / FALL_SPEED).
+var max_height := MAX_HEIGHT:
+	set(v):
+		max_height = v
+		if _guides:
+			_guides.scale = Vector3(1, v / MAX_HEIGHT, 1)
 const BAR_DEPTH := 0.006
 const HINT_LEAD := 1.0        # seconden vooraf dat de toets begint op te lichten
 
@@ -101,7 +109,7 @@ static func hand_color(hand: int, black: bool) -> Color:
 ## { noot: [kleur, sterkte] }.
 func update_view(t: float, cursor: int) -> Dictionary:
 	var hints := {}
-	var lookahead := MAX_HEIGHT / FALL_SPEED
+	var lookahead := max_height / FALL_SPEED
 	var count := 0
 	var beams: Array = []
 	var tiles: Array = []
@@ -138,7 +146,7 @@ func update_view(t: float, cursor: int) -> Dictionary:
 			if s > 0.0 and (not hints.has(pitch) or hints[pitch][1] < s):
 				hints[pitch] = [hand_color(n["hand"], false), s]
 		var bottom := maxf(0.0, (start - t) * FALL_SPEED)
-		var top := minf(MAX_HEIGHT, (end - t) * FALL_SPEED)
+		var top := minf(max_height, (end - t) * FALL_SPEED)
 		if top <= bottom:
 			continue
 		var w := PianoKeyboard.key_width(pitch) - 0.003
@@ -149,7 +157,7 @@ func update_view(t: float, cursor: int) -> Dictionary:
 		# Lichtbundel: van de toets omhoog, voor noten die er bijna zijn of klinken.
 		if state != OTHER_HAND and start - t < 1.2:
 			var s_beam := clampf(1.0 - (start - t) / 1.2, 0.0, 1.0)
-			beams.append([x, y0, z - 0.002, w * 1.6, MAX_HEIGHT, col, 1.0, s_beam])
+			beams.append([x, y0, z - 0.002, w * 1.6, max_height, col, 1.0, s_beam])
 		tiles.append([x, y0 + bottom, z, w, h, col, alpha])
 		# Gloed waar de balk de toets raakt.
 		if start <= t and state != OTHER_HAND:
@@ -172,7 +180,7 @@ func _put(idx: int, item: Array) -> void:
 	var strength := 1.0
 	if item.size() > 7:
 		strength = item[7]
-		mode = 1.0 if item[4] >= MAX_HEIGHT - 0.001 else 2.0
+		mode = 1.0 if item[4] >= max_height - 0.001 else 2.0
 	var w: float = item[3]
 	var h: float = item[4]
 	var m := 0.014 * 2.0

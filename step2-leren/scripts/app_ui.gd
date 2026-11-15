@@ -58,7 +58,7 @@ func _init() -> void:
 	_build_calib()
 	_build_diag()
 	score = ScoreView.new()
-	score.position = Vector2.ZERO
+	score.position = Vector2(0, 128 + 12)
 	score.size = Vector2(W, H - 128 - 12)
 	add_child(score)
 	show_state("menu")
@@ -377,7 +377,7 @@ func set_options(o: Dictionary) -> void:
 func _build_hud() -> void:
 	var p := PanelContainer.new()
 	p.theme_type_variation = "Hud"
-	p.position = Vector2(0, H - 128)
+	p.position = Vector2(0, 0)   # les-balk bovenaan, partituur eronder
 	p.size = Vector2(W, 128)
 	add_child(p)
 	_states["lesson"] = p
@@ -565,6 +565,14 @@ func _build_calib() -> void:
 	_cal["status"].autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_cal["status"].size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(_cal["status"])
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 10)
+	for spec in [["Scherm hoger", "screen_up"], ["Scherm lager", "screen_down"], ["Meer kantelen", "tilt_more"], ["Minder kantelen", "tilt_less"]]:
+		var sb := _button(spec[0], spec[1])
+		sb.custom_minimum_size = Vector2(250, 64)
+		srow.add_child(sb)
+	_cal["screen_row"] = srow
+	v.add_child(srow)
 	var btns := HBoxContainer.new()
 	btns.add_theme_constant_override("separation", 12)
 	_cal["done"] = _button("Klaar", "calib_done", null, "Primary")
@@ -578,7 +586,7 @@ func _build_calib() -> void:
 
 
 ## n = aantal punten, ok = fit is goed genoeg om op te slaan.
-func set_calib(title: String, steps: String, status: String, n: int, ok: bool, show_cancel := true) -> void:
+func set_calib(title: String, steps: String, status: String, n: int, ok: bool, show_cancel := true, show_screen := false) -> void:
 	_cal["title"].text = title
 	_cal["steps"].text = steps
 	_cal["status"].text = status
@@ -591,6 +599,7 @@ func set_calib(title: String, steps: String, status: String, n: int, ok: bool, s
 	_cal["dots"].text = dots
 	_cal["dots"].add_theme_color_override("font_color", ACCENT if ok else AMBER)
 	_cal["cancel"].visible = show_cancel
+	_cal["screen_row"].visible = show_screen
 
 
 # ---------------------------------------------------------------- diagnose
