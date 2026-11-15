@@ -514,9 +514,9 @@ func _on_ui(id: String, arg: Variant) -> void:
 func _refresh_options() -> void:
 	ui.set_options({"wait": session.wait_mode, "hand": session.practice_hand, "speed": session.speed,
 		"keys": KEY_ALPHA_NAMES[key_alpha_i], "passthrough": passthrough_on,
-		"hz_text": "%d Hz" % roundi(_current_rate()) if _current_rate() > 0 else "Hz",
-		"hz_disabled": _refresh_rates().size() < 2,
-		"hz_note": "" if _refresh_rates().size() >= 2 else "De headset biedt apps nu maar één verversingsfrequentie aan."})
+		"hz_text": _hz_text(),
+		"hz_disabled": not xr_active,
+		"hz_note": "Kies 72, 90 of 120 Hz. Als de headset het niet meteen aanbiedt, geldt het na een herstart van KeySight."})
 
 
 # ---------------------------------------------------------------- verversingsfrequentie
@@ -546,13 +546,36 @@ func _apply_refresh_rate(rate: float) -> void:
 	_log("[hz] gevraagd %.0f Hz, nu %.0f Hz (beschikbaar: %s)" % [rate, _current_rate(), _refresh_rates()])
 
 
+const HZ_CHOICES := [72.0, 90.0, 120.0]
+const HZ_FILE := "keysight_hz.txt"   # naast de app; het startscript zet dit in SteamVR
+
+
+func _hz_text() -> String:
+	var now := _current_rate()
+	if _wanted_rate > 0.0 and absf(_wanted_rate - now) > 0.5:
+		return "%d Hz (na herstart)" % roundi(_wanted_rate)
+	return "%d Hz" % roundi(now) if now > 0.0 else "Hz"
+
+
+## Wisselt 72 -> 90 -> 120 Hz. Biedt OpenXR de frequentie meteen aan, dan
+## schakelen we direct. Anders schrijven we de keuze weg; het startscript
+## zet hem als SteamVR-voorkeur voor deze app, zodat hij na herstart geldt.
 func _next_refresh_rate() -> void:
+	var base := _wanted_rate if _wanted_rate > 0.0 else _current_rate()
+	var i := -1
+	for k in HZ_CHOICES.size():
+		if absf(HZ_CHOICES[k] - base) < 0.5:
+			i = k
+	_wanted_rate = HZ_CHOICES[(i + 1) % HZ_CHOICES.size()]
 	var rates := _refresh_rates()
-	if rates.size() < 2:
-		return
-	var i := rates.find(_current_rate())
-	_wanted_rate = rates[(i + 1) % rates.size()]
-	_apply_refresh_rate(_wanted_rate)
+	for r in rates:
+		if absf(r - _wanted_rate) < 0.5:
+			_apply_refresh_rate(r)
+	var f := FileAccess.open(OS.get_executable_path().get_base_dir().path_join(HZ_FILE), FileAccess.WRITE)
+	if f:
+		f.store_string(str(roundi(_wanted_rate)))
+		f.close()
+	_log("[hz] gekozen %d Hz (nu %.0f, OpenXR biedt %s)" % [roundi(_wanted_rate), _current_rate(), rates])
 
 
 # ---------------------------------------------------------------- kalibratie
