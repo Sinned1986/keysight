@@ -14,14 +14,17 @@ your real keys.
 ## Features
 
 - **Falling notes on your real keys**, in the style of Synthesia. A bar's bottom edge reaches
-  the key exactly when you should play it, and its length is the note length. Right hand is
-  violet, left hand is cyan. The target key lights up just before the note arrives, then turns
-  green when you hit it and red for a wrong key.
+  the key exactly when you should play it, and its length is the note length. Notes are drawn
+  as glowing neon tiles (left hand cyan, right hand violet) with a soft light beam towards the
+  key and a glow where they land; edges are anti-aliased (MSAA). The target key lights up just
+  before the note arrives, then turns green when you hit it and red for a wrong key.
 - **Sheet music view** (optional): a grand staff on the panel above the keys, where a paper
   score would stand. Note values with stems and flags, clefs, key signature (from the file or
   estimated), time signature and bar lines, a cursor and a page turn per system. Played notes
-  turn green, missed ones red. Choose falling notes, score, or both. Notation from MIDI is an
-  approximation: quantised to 16ths, no ties or beams, simplified rests.
+  turn green, missed ones red. Choose falling notes, score, or both with *Beeld*
+  (Vallend / Partituur / Beide); with both, the falling notes get shorter so they don't touch
+  the score. The panel's height and tilt can be adjusted under *Bijstellen*. Notation from MIDI
+  is an approximation: quantised to 16ths, no ties or beams, simplified rests.
 - **Wait mode**: the song pauses at every chord until you've played all of its notes. The clock
   starts on your first correct key.
 - **Play-along mode** at 30-150 % tempo, with timing measured per note.
@@ -35,12 +38,17 @@ your real keys.
 - **Calibration by touching keys**: press a few real keys with the controller tip, and since
   MIDI tells the app exactly which key it was, a least-squares fit lines up all 88 keys,
   including your piano's exact width. You can fine-tune the result with the thumbsticks.
+- **Refresh rate** 72 / 90 / 120 Hz (button *Hz*), holding a steady 90 fps with all effects.
+- **Tested**: a self-test (MIDI parsing, calibration maths, scoring, notation, a regression test
+  for MIDI dropping out) plus a [hardware checklist](docs/HARDWARE_TEST.md) for the headset.
 - **Hands-free controls**: the middle (sostenuto) pedal starts and pauses. In the menu, the
   lowest A and B keys choose the previous or next song.
 
-| Lesson | Results |
+| Lesson (falling notes + score) | Score view |
 |---|---|
-| ![Lesson](docs/lesson.png) | ![Results](docs/results.png) |
+| ![Lesson: neon falling notes with the score above](docs/lesson.png) | ![Score view](docs/score.png) |
+
+![Results card](docs/results.png)
 
 *Screenshots are from the desktop build. On the headset you see your room and piano behind the overlay.*
 
@@ -72,7 +80,9 @@ godot --headless --path . --export-release "Steam Frame Arm64"
    scp step2-leren/build/frame-arm64/KeySight.arm64 steamos@<headset-ip>:keysight/
    ssh steamos@<headset-ip> "chmod +x ~/keysight/KeySight.arm64"
    ```
-3. Add it to Steam as a **non-Steam game**, for example with the SteamOS Devkit Client
+   Optionally copy `step2-leren/tools/keysight.sh` next to it (`chmod +x`) and start that
+   instead: it writes a log, installs staged updates and applies the *Hz* choice.
+3. Add it (or `keysight.sh`) to Steam as a **non-Steam game**, for example with the SteamOS Devkit Client
    (Title Upload, start command `KeySight.arm64`), or from desktop mode. KeySight runs fine
    without a Steam Linux Runtime.
 4. Plug the piano into the headset and start KeySight from your library.
@@ -86,17 +96,22 @@ godot --headless --path . --export-release "Steam Frame Arm64"
 | Where | Action |
 |---|---|
 | Controller | Point at the panel and pull the trigger. The stick scrolls the song list. A/X start or pause, B/Y restart. |
+| Menu options | *Modus* (wait / play along), *Handen* (both / left / right), *Tempo*, *Beeld* (falling notes / score / both), *Hz* (72 / 90 / 120), *Toetsen* (how visible the virtual keys are), *Passthrough* |
 | Piano only | Middle pedal starts, pauses or restarts. In the menu, the lowest A selects the previous song and the lowest B the next one. |
 | Desktop (testing) | Mouse on the panel, Space, arrow keys (song/tempo), W, H, R, B (-5 s), K, P, Esc |
 
 **Calibration:** press *Kalibreren*, hold a controller and use the yellow dot to press real keys one
 at a time, near their front edge: first far left, then far right, then a few in the middle.
-Then press *Klaar*. Use *Bijstellen* to nudge the keyboard with the sticks.
+Then press *Klaar*. Use *Bijstellen* to nudge the keyboard with the sticks (right stick: sideways
+and depth, left stick: height and rotation), and to move the panel higher or lower or tilt it.
 
 ## Known limits
 
 - **No hand tracking** on the Frame (yet), so you put the controllers down while you play.
-- The display runs at **72 Hz** (the only rate offered to the app).
+- **Refresh rate**: by default SteamVR offers a non-Steam app only 72 Hz. The *Hz* button saves
+  72, 90 or 120 Hz; the launcher script then sets that as SteamVR's per-app preference
+  (`steam.app.<appid>.preferredRefreshRate` via `vrcmd`), so it applies from the next start.
+  The neon effects and score run at a steady 90 fps (11.1 ms) on the Frame.
 - Apps can't access the cameras, so calibration works by touching keys rather than by
   recognising the keyboard visually.
 - **No sound and no MIDI output**: your piano makes the sound, and Godot has no MIDI out, so
@@ -121,7 +136,7 @@ Then press *Klaar*. Use *Bijstellen* to nudge the keyboard with the sticks.
 | `step2-leren/` | **KeySight** (Godot project). Scripts are in `scripts/`; `tools/make_songs.py` generates the bundled songs. |
 | `step1-midi-test/` | The first prototype: checks that USB-MIDI and passthrough work on the Frame, with a diagnostics panel. |
 | `artwork/` | Steam library artwork plus the script that makes it |
-| `docs/` | Screenshots |
+| `docs/` | Screenshots and the hardware checklist |
 
 ## Roadmap
 
