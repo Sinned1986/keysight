@@ -1,0 +1,8 @@
+[configuration]
+entry_symbol = "keysight_synth_init"
+compatibility_minimum = "4.4"
+reloadable = false
+
+[libraries]
+linux.x86_64 = "res://addons/keysight_synth/bin/libkeysight_synth.x86_64.so"
+linux.arm64 = "res://addons/keysight_synth/bin/libkeysight_synth.aarch64.so"

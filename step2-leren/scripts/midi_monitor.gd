@@ -10,6 +10,8 @@ extends Node
 signal note_on(note: int, velocity: int, channel: int)
 signal note_off(note: int, channel: int)
 signal control_change(controller: int, value: int, channel: int)
+signal midi_event(event: InputEventMIDI)
+signal input_lost
 signal devices_changed(devices: PackedStringArray)
 signal raw_event(text: String)
 
@@ -32,6 +34,8 @@ var other_messages := {}       # naam -> aantal (clock, active sensing, ...)
 
 var _rescan_timer := 0.0
 var _opened := false
+var _raw_ports := PackedStringArray()
+var _port_check := 0.0
 
 
 func _ready() -> void:
@@ -67,6 +71,18 @@ func rescan() -> void:
 
 
 func _process(delta: float) -> void:
+	_port_check += delta
+	if _opened and OS.get_name() == "Linux" and _port_check >= 0.5:
+		_port_check = 0.0
+		var ports := PackedStringArray()
+		for file in DirAccess.get_files_at("/dev/snd"):
+			if file.begins_with("midiC"):
+				ports.append(file)
+		for port in _raw_ports:
+			if not ports.has(port):
+				input_lost.emit()
+				break
+		_raw_ports = ports
 	# Let op: niet automatisch sluiten als het apparaat "weg lijkt". Godot leest
 	# /proc/asound/cards als leeg bestand, waardoor dat elke 3 s MIDI afsloot
 	# (noten en loslaten gingen verloren). De log-spam na loskoppelen filtert
@@ -120,6 +136,8 @@ func _input(event: InputEvent) -> void:
 			# Klok/active sensing niet in het log spammen.
 			if e.message != MIDI_MESSAGE_TIMING_CLOCK and e.message != MIDI_MESSAGE_ACTIVE_SENSING:
 				raw_event.emit("%s  kan %d" % [n, e.channel + 1])
+
+	midi_event.emit(e)
 
 
 func _handle_on(note: int, velocity: int, channel: int) -> void:

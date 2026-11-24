@@ -75,3 +75,8 @@ Gebruikersgegevens (kalibratie, instellingen, scores, rapporten): `~/.local/shar
 - Lettertype: Atkinson Hyperlegible, © 2020 Braille Institute of America, SIL Open Font License
   1.1 (`fonts/OFL.txt`).
 - De piano maakt zelf het geluid. Godot heeft geen MIDI-uitgang, dus er is geen begeleiding.
+
+## Audio
+
+The **Audio** menu provides the optional internal SF2 synthesizer. See the
+[guide for setup, settings, and builds](../docs/SYNTHESIZER.md).

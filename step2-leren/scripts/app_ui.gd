@@ -37,6 +37,9 @@ var _hud := {}
 var _res := {}
 var _cal := {}
 var _diag_label: Label
+var _audio_controls := {}
+var _audio_paths := PackedStringArray()
+var _audio_options := {}
 var _updating := false
 var score: ScoreView
 var score_enabled := true
@@ -57,6 +60,7 @@ func _init() -> void:
 	_build_results()
 	_build_calib()
 	_build_diag()
+	_build_audio()
 	score = ScoreView.new()
 	score.position = Vector2(0, 128 + 12)
 	score.size = Vector2(W, H - 128 - 12)
@@ -285,7 +289,7 @@ func _build_menu() -> void:
 	right.add_child(start)
 	var tools := HBoxContainer.new()
 	tools.add_theme_constant_override("separation", 8)
-	for spec in [["Kalibreren", "calib"], ["Bijstellen", "tune"], ["Passthrough", "pass"], ["Toetsen", "keys"], ["Hz", "hz"], ["Diagnose", "diag"]]:
+	for spec in [["Kalibreren", "calib"], ["Bijstellen", "tune"], ["Passthrough", "pass"], ["Toetsen", "keys"], ["Hz", "hz"], ["Diagnose", "diag"], ["SYNTH_AUDIO", "audio_open"]]:
 		var b := _button(spec[0], spec[1])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 58)
@@ -624,6 +628,103 @@ func _build_diag() -> void:
 
 func set_diag(text: String) -> void:
 	_diag_label.text = text
+
+
+# ---------------------------------------------------------------- synthesizer
+
+func _build_audio() -> void:
+	var panel := _full_panel()
+	_states["audio"] = panel
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	panel.add_child(body)
+	body.add_child(_label("SYNTH_AUDIO", "H2"))
+	var toggles := GridContainer.new()
+	toggles.columns = 3
+	toggles.add_theme_constant_override("h_separation", 14)
+	toggles.add_theme_constant_override("v_separation", 8)
+	body.add_child(toggles)
+	for spec in [
+		["enabled", "SYNTH_ENABLED"], ["live", "SYNTH_LIVE"], ["reference", "SYNTH_REFERENCE"],
+		["demo", "SYNTH_DEMO"], ["reverb", "SYNTH_REVERB"], ["chorus", "SYNTH_CHORUS"],
+	]:
+		var toggle := CheckButton.new()
+		toggle.text = spec[1]
+		toggle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		toggle.toggled.connect(func(on: bool) -> void: action.emit("audio_setting", [spec[0], on]))
+		_audio_controls[spec[0]] = toggle
+		toggles.add_child(toggle)
+
+	var file_row := HBoxContainer.new()
+	for step in [-1, 1]:
+		var button := Button.new()
+		button.text = "‹" if step < 0 else "›"
+		button.tooltip_text = "SYNTH_PREVIOUS" if step < 0 else "SYNTH_NEXT"
+		button.custom_minimum_size.x = 70
+		button.pressed.connect(_cycle_soundfont.bind(step))
+		file_row.add_child(button)
+		_audio_controls[step] = button
+	var file_label := _label("", "", 27)
+	file_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	file_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	file_row.add_child(file_label)
+	file_row.add_child(_button("SYNTH_SCAN", "audio_scan"))
+	_audio_controls.file = file_label
+	body.add_child(_row("SYNTH_FILE", file_row))
+	var gain_row := HBoxContainer.new()
+	for step in [-0.05, 0.0, 0.05]:
+		if step == 0.0:
+			_audio_controls.gain = _label("", "", 28)
+			gain_row.add_child(_audio_controls.gain)
+		else:
+			var button := Button.new()
+			button.text = "−" if step < 0 else "+"
+			button.custom_minimum_size.x = 70
+			button.pressed.connect(func() -> void:
+				action.emit("audio_setting", ["gain", clampf(snappedf(_audio_options.gain + step, 0.01), 0.0, 1.0)]))
+			gain_row.add_child(button)
+	body.add_child(_row("SYNTH_GAIN", gain_row))
+	var voice_row := HBoxContainer.new()
+	for voices in [32, 64, 128, 256]:
+		var button := _button(str(voices), "audio_setting", ["polyphony", voices])
+		button.toggle_mode = true
+		_audio_controls[voices] = button
+		voice_row.add_child(button)
+	body.add_child(_row("SYNTH_VOICES", voice_row))
+	_audio_controls.status = _label("", "", 27)
+	_audio_controls.status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	body.add_child(_audio_controls.status)
+	var buttons := HBoxContainer.new()
+	_audio_controls.test = _button("SYNTH_TEST", "audio_test")
+	buttons.add_child(_audio_controls.test)
+	buttons.add_child(_button("SYNTH_PANIC", "audio_panic"))
+	buttons.add_child(_button("SYNTH_BACK", "back"))
+	body.add_child(buttons)
+
+
+func _cycle_soundfont(step: int) -> void:
+	if _audio_paths.is_empty():
+		return
+	var selection := _audio_paths.find(_audio_options.soundfont)
+	if selection < 0:
+		selection = -1 if step > 0 else 0
+	action.emit("audio_setting", ["soundfont", _audio_paths[posmod(selection + step, _audio_paths.size())]])
+
+
+func set_audio(options: Dictionary, status: StringName, path: String, files: PackedStringArray) -> void:
+	_audio_paths = files
+	_audio_options = options
+	for key in ["enabled", "live", "reference", "demo", "reverb", "chorus"]:
+		_audio_controls[key].set_pressed_no_signal(options[key])
+	_audio_controls.gain.text = "   %d%%   " % roundi(options.gain * 100)
+	for voices in [32, 64, 128, 256]:
+		_audio_controls[voices].set_pressed_no_signal(options.polyphony == voices)
+	for step in [-1, 1]:
+		_audio_controls[step].disabled = files.is_empty()
+	_audio_controls.file.text = (tr("SYNTH_NO_FILES") if files.is_empty() else tr("SYNTH_NO_FILE")) 		if options.soundfont.is_empty() else options.soundfont.get_file()
+	_audio_controls.file.tooltip_text = options.soundfont
+	_audio_controls.status.text = tr(status) % path.get_file() if status == &"SYNTH_READY" else tr(status)
+	_audio_controls.test.disabled = status != &"SYNTH_READY"
 
 
 # ---------------------------------------------------------------- toestanden

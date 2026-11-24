@@ -1,0 +1,3 @@
+{
+    "enabled_classes": ["AudioStream", "AudioStreamPlayback", "AudioFrame", "OS", "EditorPlugin", "EditorInterface"]
+}

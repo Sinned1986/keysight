@@ -15,6 +15,10 @@ extends Node3D
 ##   Pc: muis op het scherm, spatie start/pauze, links/rechts lied, op/neer
 ##     tempo, W wacht, H hand, R opnieuw, B -5 s, K kalibreren, P passthrough.
 
+const SynthManager := preload("res://audio/synth_manager.gd")
+const SynthText := preload("res://audio/synth_text.gd")
+const DEMO_DEVICE := -42
+
 const SONG_DIRS := ["res://songs"]
 const CALIB_FILE := "user://kalibratie.cfg"
 const SETTINGS_FILE := "user://instellingen.cfg"
@@ -41,6 +45,13 @@ var highway: NoteHighway
 var screen: VrScreen
 var ui: AppUI
 var midi: MidiMonitor
+var synth: SynthManager
+var _reference_events: Array[Array] = []
+var _audio_files := PackedStringArray()
+var _reference_index := 0
+var _reference_wait := 0.0
+var _demo_generation := 0
+var _quitting := false
 var session := PracticeSession.new()
 var calibrator := AutoCalibrator.new()
 var world_env: WorldEnvironment
@@ -74,6 +85,14 @@ var _song_info := ""
 func _ready() -> void:
 	_start_msec = Time.get_ticks_msec()
 	var args := OS.get_cmdline_user_args()
+	if "--synth-selftest" in args or "--synth-selftest" in OS.get_cmdline_args():
+		set_process(false)
+		add_child(load("res://tests/synth_selftest.gd").new())
+		return
+	# Linux exports also accept audio options without the Godot separator.
+	var audio_args := OS.get_cmdline_args()
+	audio_args.append_array(args)
+	SynthText.install()
 	if "--selftest" in args:
 		set_process(false)
 		var st: Node = load("res://scripts/selftest.gd").new()
@@ -81,12 +100,19 @@ func _ready() -> void:
 		return
 	_setup_xr()
 	_build_scene()
+	synth = SynthManager.new()
+	add_child(synth)
+	synth.initialize(audio_args)
+	get_tree().auto_accept_quit = false
+	synth.changed.connect(_refresh_audio)
 	midi = MidiMonitor.new()
 	midi.name = "MidiMonitor"
 	midi.note_on.connect(_on_note_on)
 	midi.note_off.connect(_on_note_off)
 	midi.control_change.connect(_on_cc)
 	midi.raw_event.connect(_on_raw_midi)
+	midi.midi_event.connect(_on_synth_event)
+	midi.input_lost.connect(synth.panic)
 	midi.devices_changed.connect(func(_d: PackedStringArray) -> void: _refresh_diagnostics())
 	add_child(midi)
 	session.finished.connect(_on_finished)
@@ -127,7 +153,23 @@ func _ready() -> void:
 			get_viewport().get_texture().get_image().save_png(path)
 			screen.viewport.get_texture().get_image().save_png(path.get_basename() + "_ui.png")
 			_log("[shot] " + path)
-			get_tree().quit())
+			_quit_with_audio())
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and synth:
+		_quit_with_audio()
+
+
+func _quit_with_audio() -> void:
+	if _quitting:
+		return
+	_quitting = true
+	set_process(false)
+	synth.shutdown()
+	# Give the audio server one mix interval to retire the stopped stream.
+	await get_tree().create_timer(maxf(0.05, AudioServer.get_output_latency() * 2.0)).timeout
+	get_tree().quit()
 
 
 # ---------------------------------------------------------------- XR / scene
@@ -296,6 +338,7 @@ func _refresh_song_list() -> void:
 
 
 func _select_song(i: int) -> void:
+	_reset_audio_playback()
 	if songs.is_empty():
 		ui.set_selected(-1, "Geen liedjes gevonden", "Zet .mid-bestanden in ~/pianovr/songs")
 		return
@@ -304,6 +347,7 @@ func _select_song(i: int) -> void:
 	if s.error != "":
 		_log("[lied] %s: %s" % [songs[song_index].get_file(), s.error])
 	session.load_song(s)
+	_build_reference()
 	highway.set_notes(session.notes)
 	score_model = ScoreModel.new()
 	score_model.build(s, session.notes)
@@ -329,6 +373,8 @@ func _select_song(i: int) -> void:
 # ---------------------------------------------------------------- toestanden
 
 func _set_state(st: String) -> void:
+	if ui_state == "lesson" and st != "lesson":
+		_reset_audio_playback()
 	ui_state = st
 	ui.show_state(st)
 	highway.visible = st == "lesson" and view_mode != 1
@@ -339,6 +385,10 @@ func _start_lesson() -> void:
 	if session.notes.is_empty():
 		return
 	session.restart()
+	if _demo:
+		for note in session.notes:
+			note.erase("demo")
+	_reset_audio_playback()
 	keyboard.release_all()
 	_set_state("lesson")
 	# In de wachtmodus start de klok bij de eerste juiste toets.
@@ -366,6 +416,8 @@ func _toggle_play() -> void:
 				_start_lesson()
 			else:
 				session.toggle_play()
+				if not session.playing:
+					synth.stop_reference()
 	_update_hud(true)
 
 
@@ -474,18 +526,38 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_W: _on_ui("mode", not session.wait_mode)
 		KEY_H: _on_ui("hand", [-1, 1, 0][([-1, 1, 0].find(session.practice_hand) + 1) % 3])
 		KEY_R: _on_ui("restart", null)
-		KEY_B: session.seek(-5.0)
+		KEY_B:
+			session.seek(-5.0)
+			_reset_audio_playback()
 		KEY_K: _on_ui("calib", null)
 		KEY_P: _on_ui("pass", null)
 		KEY_ESCAPE: _on_ui("menu", null)
 
 
 func _on_ui(id: String, arg: Variant) -> void:
+	if id.begins_with("audio_"):
+		match id:
+			"audio_open":
+				_audio_files = SynthManager.soundfonts()
+				_set_state("audio")
+				_refresh_audio()
+			"audio_panic": synth.panic()
+			"audio_test": synth.test_tone()
+			"audio_setting": synth.configure(arg[0], arg[1])
+			"audio_scan":
+				_audio_files = SynthManager.soundfonts()
+				synth.retry_soundfont()
+				_refresh_audio()
+		return
 	match id:
 		"song": _select_song(int(arg))
 		"start": _start_lesson()
-		"mode": session.set_wait_mode(bool(arg))
-		"hand": session.set_practice_hand(int(arg))
+		"mode":
+			session.set_wait_mode(bool(arg))
+			_reset_audio_playback()
+		"hand":
+			session.set_practice_hand(int(arg))
+			_reset_audio_playback()
 		"view":
 			view_mode = int(arg)
 			_layout_screen()
@@ -821,6 +893,8 @@ func _process(delta: float) -> void:
 		_demo_step()
 	if ui_state == "lesson":
 		session.update(delta)
+		if ui_state == "lesson":
+			_step_reference(delta)
 		if view_mode != 0 and session.song:
 			ui.score.set_cursor(score_model.pos16(session.song.seconds_to_ticks(session.t)))
 		var hints := highway.update_view(session.t, session.cursor())
@@ -1073,12 +1147,64 @@ func _demo_step() -> void:
 			pitch += 1  # verkeerde toets
 		_demo_send(pitch, clampi(n["vel"] + randi_range(-15, 15), 1, 127), true)
 		var off_after: float = (n["end"] - n["start"]) / session.speed * randf_range(0.6, 1.0)
-		get_tree().create_timer(off_after).timeout.connect(_demo_send.bind(pitch, 0, false))
+		get_tree().create_timer(off_after).timeout.connect(_demo_send.bind(pitch, 0, false, _demo_generation))
 
 
-func _demo_send(pitch: int, vel: int, on: bool) -> void:
+func _demo_send(pitch: int, vel: int, on: bool, generation := -1) -> void:
+	if generation != -1 and generation != _demo_generation:
+		return
 	var e := InputEventMIDI.new()
+	e.device = DEMO_DEVICE
 	e.message = MIDI_MESSAGE_NOTE_ON if on else MIDI_MESSAGE_NOTE_OFF
 	e.pitch = pitch
 	e.velocity = vel
 	Input.parse_input_event(e)
+
+# ---------------------------------------------------------------- audio
+
+func _refresh_audio() -> void:
+	if ui_state == "audio":
+		ui.set_audio(synth.options, synth.status, synth.loaded_path, _audio_files)
+
+
+func _on_synth_event(event: InputEventMIDI) -> void:
+	if event.device == DEMO_DEVICE:
+		synth.playback_note(SynthManager.DEMO, event.channel, event.pitch, event.velocity)
+	else:
+		synth.midi_event(event)
+
+
+func _build_reference() -> void:
+	_reference_events.clear()
+	for note in session.notes:
+		var start: float = note.start
+		var end := maxf(start + 0.001, note.end)
+		_reference_events.append([start, note.channel, note.pitch, note.vel])
+		_reference_events.append([end, note.channel, note.pitch, 0])
+	_reference_events.sort_custom(func(a: Array, b: Array) -> bool:
+		return a[3] < b[3] if a[0] == b[0] else a[0] < b[0])
+	_reference_index = 0
+
+
+func _reset_audio_playback() -> void:
+	synth.panic()
+	_demo_generation += 1
+	_reference_wait = 0.0
+	_reference_index = 0
+	while _reference_index < _reference_events.size() and _reference_events[_reference_index][0] < session.t:
+		_reference_index += 1
+
+
+func _step_reference(delta: float) -> void:
+	if not session.playing:
+		return
+	while _reference_index < _reference_events.size() and _reference_events[_reference_index][0] <= session.t:
+		var event := _reference_events[_reference_index]
+		synth.playback_note(SynthManager.REFERENCE, event[1], event[2], event[3])
+		_reference_index += 1
+	if session.waiting:
+		_reference_wait += delta
+		if _reference_wait >= 0.6 and _reference_wait - delta < 0.6:
+			synth.stop_reference()
+	else:
+		_reference_wait = 0.0
